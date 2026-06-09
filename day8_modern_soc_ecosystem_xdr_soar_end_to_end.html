@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day 8 — Modern SOC Ecosystem, XDR, SOAR & End-to-End SOC Operations</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        primary: '#8B5CF6',
+        secondary: '#3B82F6',
+        accent: '#06B6D4',
+        dark: { bg: '#0B0B0F', card: 'rgba(15,15,25,0.85)', border: 'rgba(139,92,246,0.2)' }
+      },
+      animation: {
+        pulseglow: 'pulseglow 2s ease-in-out infinite',
+        slideUp: 'slideUp 0.6s ease-out',
+        fadeIn: 'fadeIn 0.5s ease-out',
+        float: 'float 3s ease-in-out infinite',
+        breathe: 'breathe 4s ease-in-out infinite'
+      },
+      keyframes: {
+        pulseglow: { '0%,100%': { boxShadow: '0 0 20px rgba(139,92,246,0.2)' }, '50%': { boxShadow: '0 0 40px rgba(139,92,246,0.4)' } },
+        slideUp: { '0%': { opacity: '0', transform: 'translateY(30px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+        float: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } },
+        breathe: { '0%,100%': { opacity: '0.6' }, '50%': { opacity: '1' } }
+      }
+    }
+  }
+}
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; background:#0B0B0F; color:#e2e8f0; overflow-x:hidden; }
+.mono { font-family:'JetBrains Mono',monospace; }
+.glass { background:rgba(15,15,25,0.85); backdrop-filter:blur(16px); border:1px solid rgba(139,92,246,0.15); }
+.glass-light { background:rgba(20,20,35,0.7); backdrop-filter:blur(12px); border:1px solid rgba(139,92,246,0.1); }
+.gradient-text { background:linear-gradient(135deg,#8B5CF6,#3B82F6,#06B6D4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.gradient-border { position:relative; }
+.gradient-border::before { content:''; position:absolute; inset:0; border-radius:inherit; padding:1px; background:linear-gradient(135deg,#8B5CF6,#3B82F6,#06B6D4); -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0); -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+.gradient-bg { background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(59,130,246,0.1),rgba(6,182,212,0.08)); }
+.section-divider { height:2px; background:linear-gradient(90deg,transparent,#8B5CF6,#3B82F6,#06B6D4,transparent); margin:4rem 0; }
+.animate-on-scroll { opacity:0; transform:translateY(20px); transition:all 0.6s ease-out; }
+.animate-on-scroll.visible { opacity:1; transform:translateY(0); }
+.dot-grid { background-image:radial-gradient(rgba(139,92,246,0.15) 1px,transparent 1px); background-size:20px 20px; }
+.stat-card { transition:all 0.3s ease; }
+.stat-card:hover { transform:translateY(-4px); box-shadow:0 8px 30px rgba(139,92,246,0.2); }
+.attack-step { transition:all 0.3s ease; cursor:pointer; }
+.attack-step:hover { transform:translateX(4px); }
+.attack-step.active { border-color:#8B5CF6; background:rgba(139,92,246,0.08); }
+.career-node { transition:all 0.3s ease; cursor:pointer; }
+.career-node:hover { transform:scale(1.04); }
+.timeline-dot { width:16px; height:16px; border-radius:50%; border:3px solid #8B5CF6; background:#0B0B0F; position:relative; z-index:2; transition:all 0.3s ease; }
+.timeline-dot:hover { background:#8B5CF6; box-shadow:0 0 20px rgba(139,92,246,0.5); }
+.timeline-line { position:absolute; left:7px; top:16px; bottom:0; width:2px; background:linear-gradient(180deg,#8B5CF6,transparent); }
+.hex-glow { box-shadow:0 0 30px rgba(139,92,246,0.1),inset 0 0 30px rgba(139,92,246,0.05); }
+.mitre-badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:10px; font-weight:600; }
+.lab-check { width:18px; height:18px; border:2px solid rgba(139,92,246,0.4); border-radius:4px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.2s; flex-shrink:0; }
+.lab-check.checked { background:#8B5CF6; border-color:#8B5CF6; }
+.lab-check.checked::after { content:'\2713'; color:#fff; font-size:11px; font-weight:700; }
+.quiz-option { transition:all 0.3s ease; cursor:pointer; }
+.quiz-option:hover { border-color:#8B5CF6; background:rgba(139,92,246,0.08); }
+.quiz-option.correct { border-color:#22c55e; background:rgba(34,197,94,0.1); }
+.quiz-option.wrong { border-color:#ef4444; background:rgba(239,68,68,0.1); }
+.quiz-option.disabled { pointer-events:none; opacity:0.6; }
+.workflow-node { transition:all 0.3s ease; }
+.workflow-node:hover { transform:scale(1.05); box-shadow:0 0 20px rgba(139,92,246,0.3); }
+.soc-timeline-item { border-left:2px solid rgba(139,92,246,0.3); padding-left:20px; margin-left:10px; position:relative; }
+.soc-timeline-item::before { content:''; position:absolute; left:-6px; top:4px; width:10px; height:10px; border-radius:50%; background:#8B5CF6; border:2px solid #0B0B0F; }
+.maturity-item { transition:all 0.3s ease; }
+.maturity-item:hover { transform:translateX(6px); }
+</style>
+</head>
+<body class="dot-grid">
+
+<div class="max-w-6xl mx-auto px-4">
+
+<!-- HERO -->
+<section class="relative min-h-screen flex items-center justify-center overflow-hidden" id="hero">
+  <div class="absolute inset-0" style="background:radial-gradient(ellipse at 50% 30%,rgba(139,92,246,0.1),transparent 70%),radial-gradient(ellipse at 80% 60%,rgba(6,182,212,0.06),transparent 50%)"></div>
+  <div class="relative z-10 text-center px-4 max-w-5xl mx-auto">
+    <div class="inline-block px-4 py-1.5 rounded-full bg-purple-900/30 border border-purple-500/20 text-purple-400 text-xs font-semibold tracking-widest mb-6 animate-breathe">DAY 8 — GRAND FINALE</div>
+    <h1 class="text-3xl md:text-5xl font-black mb-4 leading-tight">
+      <span class="gradient-text">Modern SOC Ecosystem,<br/>XDR, SOAR &amp; End-to-End<br/>SOC Operations</span>
+    </h1>
+    <p class="text-base md:text-lg text-gray-400 mb-6 max-w-2xl mx-auto">Connecting Everything Learned So Far Into A Complete Security Operations Center Workflow</p>
+
+    <div class="flex flex-wrap justify-center gap-2 mb-8">
+      <div class="px-3 py-1 rounded-full bg-cyan-900/30 border border-cyan-500/20 text-cyan-400 text-xs font-semibold">&#9201; 60 Min</div>
+      <div class="px-3 py-1 rounded-full bg-blue-900/30 border border-blue-500/20 text-blue-400 text-xs font-semibold">12 Modules</div>
+      <div class="px-3 py-1 rounded-full bg-yellow-900/30 border border-yellow-500/20 text-yellow-400 text-xs font-semibold">&#9733; Capstone Lab</div>
+    </div>
+
+    <div class="glass rounded-2xl p-5 md:p-7 max-w-3xl mx-auto mb-8 text-left hex-glow">
+      <div class="text-xs text-gray-500 mono mb-3">SCENARIO</div>
+      <div class="space-y-1.5 text-sm text-gray-300">
+        <div>&#8594; A phishing email is opened.</div>
+        <div>&#8594; PowerShell executes.</div>
+        <div>&#8594; Credentials are stolen.</div>
+        <div>&#8594; The attacker moves laterally.</div>
+        <div>&#8594; Sensitive data is exfiltrated.</div>
+      </div>
+      <div class="mt-4 pt-3 border-t border-gray-800">
+        <div class="text-purple-400 font-semibold text-sm">How does a SOC detect, investigate, respond and recover from this attack?</div>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap justify-center gap-1 md:gap-1.5 text-[10px] md:text-xs max-w-4xl mx-auto">
+      <div class="px-2 py-1 rounded bg-gray-800 border border-gray-700 text-gray-400">Systems</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-gray-800 border border-gray-700 text-gray-400">Logs</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-blue-900/30 border border-blue-500/30 text-blue-300 font-semibold">SIEM</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-purple-900/30 border border-purple-500/30 text-purple-300 font-semibold">Detection</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-yellow-900/30 border border-yellow-500/30 text-yellow-300 font-semibold">Alert</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-cyan-900/30 border border-cyan-500/30 text-cyan-300 font-semibold">Investigation</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-orange-900/30 border border-orange-500/30 text-orange-300 font-semibold">MITRE Mapping</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-red-900/30 border border-red-500/30 text-red-300 font-semibold">Incident Response</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-green-900/30 border border-green-500/30 text-green-300 font-semibold">Automation</div>
+      <div class="text-gray-600 flex items-center">&#8595;</div>
+      <div class="px-2 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300 font-semibold">Modern SOC</div>
+    </div>
+  </div>
+  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 animate-float">
+    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+  </div>
+</section>
+
+<!-- PHASE 1: FROM LOGS TO SOC -->
+<section class="mb-16 animate-on-scroll" id="phase1">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-purple-900/20 border border-purple-500/20 text-purple-400 text-xs font-semibold mb-3">PHASE 1</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">From Logs to SOC</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">A SOC is not a single tool. It's an ecosystem of people, processes, and technology working together.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 md:p-8 mb-8">
+    <div class="text-sm text-gray-500 mb-4">Over the last 7 days we learned:</div>
+    <div class="flex flex-wrap gap-2 mb-6">
+      <div class="px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">Logs</div>
+      <div class="px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">SIEM</div>
+      <div class="px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">Detection Rules</div>
+      <div class="px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">Alerting</div>
+      <div class="px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">Threat Hunting</div>
+      <div class="px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">MITRE ATT&CK</div>
+      <div class="px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 text-xs">Incident Response</div>
+    </div>
+    <div class="text-purple-400 font-semibold mb-4 text-sm">But how do these all work together?</div>
+
+    <div class="bg-gray-900/50 rounded-xl p-5">
+      <div class="flex flex-col items-center gap-0 text-xs">
+        <div class="flex flex-wrap justify-center gap-2 mb-0">
+          <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-400">Windows</div>
+          <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-400">Linux</div>
+          <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-400">Firewall</div>
+          <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-400">EDR</div>
+          <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-400">Cloud</div>
+        </div>
+        <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        <div class="workflow-node px-4 py-1.5 rounded bg-blue-900/30 border border-blue-500/30 text-blue-300 font-semibold">Logs</div>
+        <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        <div class="workflow-node px-4 py-1.5 rounded bg-purple-900/30 border border-purple-500/30 text-purple-300 font-semibold">SIEM</div>
+        <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        <div class="workflow-node px-4 py-1.5 rounded bg-yellow-900/30 border border-yellow-500/30 text-yellow-300 font-semibold">Detection</div>
+        <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        <div class="workflow-node px-4 py-1.5 rounded bg-orange-900/30 border border-orange-500/30 text-orange-300 font-semibold">Alert</div>
+        <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        <div class="workflow-node px-4 py-1.5 rounded bg-cyan-900/30 border border-cyan-500/30 text-cyan-300 font-semibold">Investigation</div>
+        <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        <div class="workflow-node px-4 py-1.5 rounded bg-red-900/30 border border-red-500/30 text-red-300 font-semibold">Incident &#8594; Response</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-xl p-6 gradient-bg border border-red-500/10">
+    <div class="flex items-start gap-4">
+      <div class="w-10 h-10 rounded-lg bg-red-900/30 flex items-center justify-center text-red-400 flex-shrink-0 text-lg">&#9762;</div>
+      <div>
+        <div class="text-red-400 font-semibold mb-1">Attacker Perspective</div>
+        <p class="text-gray-400 text-sm">Attackers know most SOC tools operate in silos. They exploit gaps between systems — which is exactly why a <span class="text-purple-400">connected SOC ecosystem</span> defeats their strategy.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 2: MODERN SOC ARCHITECTURE -->
+<section class="mb-16 animate-on-scroll" id="phase2">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-cyan-900/20 border border-cyan-500/20 text-cyan-400 text-xs font-semibold mb-3">PHASE 2</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Modern SOC Architecture</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">A modern SOC rests on three pillars: People, Process, and Technology. Remove any one and the SOC fails.</p>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-4 mb-8">
+    <div class="glass rounded-xl p-6 stat-card gradient-border">
+      <div class="w-12 h-12 rounded-xl bg-purple-900/30 flex items-center justify-center text-purple-400 text-2xl mb-3">&#128101;</div>
+      <div class="text-purple-400 font-bold text-lg mb-3">People</div>
+      <ul class="space-y-1.5">
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>SOC Analysts L1-L3</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>Threat Hunters</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>Incident Responders</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>SOC Manager</li>
+      </ul>
+    </div>
+    <div class="glass rounded-xl p-6 stat-card gradient-border">
+      <div class="w-12 h-12 rounded-xl bg-cyan-900/30 flex items-center justify-center text-cyan-400 text-2xl mb-3">&#128203;</div>
+      <div class="text-cyan-400 font-bold text-lg mb-3">Process</div>
+      <ul class="space-y-1.5">
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>Monitoring &amp; Detection</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>Alert Triage &amp; Investigation</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>Escalation &amp; Response</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>Documentation &amp; Reporting</li>
+      </ul>
+    </div>
+    <div class="glass rounded-xl p-6 stat-card gradient-border">
+      <div class="w-12 h-12 rounded-xl bg-blue-900/30 flex items-center justify-center text-blue-400 text-2xl mb-3">&#128187;</div>
+      <div class="text-blue-400 font-bold text-lg mb-3">Technology</div>
+      <ul class="space-y-1.5">
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>SIEM &amp; Log Management</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>EDR / XDR Platforms</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>SOAR &amp; Automation</li>
+        <li class="flex items-center gap-2 text-gray-400 text-sm"><span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>Threat Intelligence</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-6 mb-8 gradient-bg border border-purple-500/10">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-lg bg-purple-900/30 flex items-center justify-center text-purple-400 flex-shrink-0 font-bold text-lg">!</div>
+      <div>
+        <div class="text-purple-400 font-bold text-sm mb-1">Key Learning</div>
+        <p class="text-gray-400 text-sm">Technology alone cannot secure an organization. People interpret findings, processes guide actions, and technology enables scale.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-6">
+    <div class="text-sm text-gray-500 mb-4">SOC Architecture Flow</div>
+    <div class="flex flex-col items-center gap-0 text-xs">
+      <div class="flex flex-wrap justify-center gap-1.5">
+        <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300">Windows</div>
+        <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300">Linux</div>
+        <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300">Firewall</div>
+        <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300">Cloud</div>
+        <div class="workflow-node px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300">EDR</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="workflow-node px-4 py-1.5 rounded bg-blue-900/30 border border-blue-500/30 text-blue-300 font-semibold">Log Collection</div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="workflow-node px-4 py-1.5 rounded bg-purple-900/30 border border-purple-500/30 text-purple-300 font-semibold">SIEM</div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="workflow-node px-4 py-1.5 rounded bg-yellow-900/30 border border-yellow-500/30 text-yellow-300 font-semibold">SOC Analysts</div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="workflow-node px-4 py-1.5 rounded bg-red-900/30 border border-red-500/30 text-red-300 font-semibold">Incident Response</div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="workflow-node px-4 py-1.5 rounded bg-green-900/30 border border-green-500/30 text-green-300 font-semibold">Automation</div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 3: THREAT INTELLIGENCE -->
+<section class="mb-16 animate-on-scroll" id="phase3">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-red-900/20 border border-red-500/20 text-red-400 text-xs font-semibold mb-3">PHASE 3</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Threat Intelligence</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">How do we know if an IP, domain, or file is malicious? Threat intelligence provides the answer.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 mb-8">
+    <div class="text-sm text-gray-500 mb-4 mono">SCENARIO: FIREWALL ALERT</div>
+    <div class="flex items-center gap-3 mb-6">
+      <div class="px-3 py-2 rounded-lg bg-red-900/10 border border-red-500/20">
+        <div class="text-xs text-gray-500">Source IP</div>
+        <div class="text-sm font-bold text-white mono">185.23.xx.xx</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <div class="text-gray-400 text-sm">Is this IP malicious?</div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700 text-center stat-card">
+        <div class="text-red-400 text-xl mb-1">&#127759;</div>
+        <div class="text-gray-300 text-xs font-semibold">Malicious IPs</div>
+        <div class="text-gray-600 text-[10px]">Known attacker infrastructure</div>
+      </div>
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700 text-center stat-card">
+        <div class="text-orange-400 text-xl mb-1">&#127760;</div>
+        <div class="text-gray-300 text-xs font-semibold">Malicious Domains</div>
+        <div class="text-gray-600 text-[10px]">Phishing &amp; C2 domains</div>
+      </div>
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700 text-center stat-card">
+        <div class="text-cyan-400 text-xl mb-1">&#128196;</div>
+        <div class="text-gray-300 text-xs font-semibold">File Hashes</div>
+        <div class="text-gray-600 text-[10px]">Known malware samples</div>
+      </div>
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700 text-center stat-card">
+        <div class="text-purple-400 text-xl mb-1">&#128101;</div>
+        <div class="text-gray-300 text-xs font-semibold">Threat Actors</div>
+        <div class="text-gray-600 text-[10px]">APT &amp; criminal groups</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-6">
+    <div class="text-sm text-gray-500 mb-4">Threat Intelligence Lookup Simulation</div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700">
+        <div class="text-yellow-400 text-xs font-semibold mb-2">User Visits</div>
+        <div class="text-white text-sm mono">evil-login-security.com</div>
+        <div class="mt-3 p-2 rounded bg-red-900/10 border border-red-500/20">
+          <div class="text-red-400 text-xs font-semibold flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>Threat Intel: Known Phishing Domain</div>
+        </div>
+      </div>
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700">
+        <div class="text-green-400 text-xs font-semibold mb-2">Result</div>
+        <div class="flex items-center gap-2 mb-2"><span class="px-2 py-0.5 rounded bg-red-500/20 text-red-400 text-xs font-bold">HIGH SEVERITY</span></div>
+        <div class="text-gray-400 text-sm">Alert escalated to SOC analyst for immediate investigation.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 4: XDR -->
+<section class="mb-16 animate-on-scroll" id="phase4">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-cyan-900/20 border border-cyan-500/20 text-cyan-400 text-xs font-semibold mb-3">PHASE 4</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Extended Detection &amp; Response (XDR)</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">Why investigate email, endpoint, and firewall alerts separately when they're part of the same attack?</p>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4 mb-8">
+    <div class="glass rounded-xl p-6 border-l-4 border-l-red-500 stat-card">
+      <div class="text-red-400 font-semibold text-sm mb-3">&#10007; Traditional Investigation</div>
+      <div class="space-y-2">
+        <div class="flex items-center gap-2 text-sm text-gray-400"><span class="text-red-400">&#8594;</span> Open Firewall Console</div>
+        <div class="flex items-center gap-2 text-sm text-gray-400"><span class="text-red-400">&#8594;</span> Open EDR Console</div>
+        <div class="flex items-center gap-2 text-sm text-gray-400"><span class="text-red-400">&#8594;</span> Open SIEM</div>
+        <div class="flex items-center gap-2 text-sm text-gray-400"><span class="text-red-400">&#8594;</span> Open Email Gateway</div>
+      </div>
+      <div class="mt-3 text-xs text-gray-600">Fragmented view across multiple consoles</div>
+    </div>
+    <div class="glass rounded-xl p-6 border-l-4 border-l-green-500 stat-card">
+      <div class="text-green-400 font-semibold text-sm mb-3">&#10003; XDR Investigation</div>
+      <div class="space-y-2">
+        <div class="flex items-center gap-2 text-sm text-gray-300"><span class="text-green-400">&#8594;</span> Email Received</div>
+        <div class="flex items-center gap-2 text-sm text-gray-300"><span class="text-green-400">&#8594;</span> PowerShell Executed</div>
+        <div class="flex items-center gap-2 text-sm text-gray-300"><span class="text-green-400">&#8594;</span> Malware Downloaded</div>
+        <div class="flex items-center gap-2 text-sm text-gray-300"><span class="text-green-400">&#8594;</span> Credential Theft</div>
+      </div>
+      <div class="mt-3 text-xs text-gray-500">Single unified timeline — everything in one place</div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-6 mb-8">
+    <div class="text-sm text-gray-500 mb-4">SIEM vs XDR</div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700">
+        <div class="text-blue-400 font-bold text-sm mb-3">SIEM</div>
+        <ul class="space-y-1.5 text-sm text-gray-400">
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-blue-400"></span>Collects and indexes logs</li>
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-blue-400"></span>Broad visibility across sources</li>
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-blue-400"></span>Search-focused investigation</li>
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-blue-400"></span>Centralized log storage</li>
+        </ul>
+      </div>
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700">
+        <div class="text-cyan-400 font-bold text-sm mb-3">XDR</div>
+        <ul class="space-y-1.5 text-sm text-gray-400">
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-cyan-400"></span>Correlates cross-layer telemetry</li>
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-cyan-400"></span>Deep contextual investigation</li>
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-cyan-400"></span>Automated attack story reconstruction</li>
+          <li class="flex items-center gap-2"><span class="w-1 h-1 rounded-full bg-cyan-400"></span>Built-in detection &amp; response</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-6 gradient-bg border border-cyan-500/10">
+    <div class="flex flex-col items-center gap-0 text-xs">
+      <div class="flex flex-wrap justify-center gap-1.5">
+        <div class="workflow-node px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-gray-300 font-semibold">Email</div>
+        <div class="workflow-node px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-gray-300 font-semibold">Endpoint</div>
+        <div class="workflow-node px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-gray-300 font-semibold">Firewall</div>
+        <div class="workflow-node px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-gray-300 font-semibold">Cloud</div>
+        <div class="workflow-node px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-gray-300 font-semibold">Identity</div>
+      </div>
+      <svg class="w-4 h-4 text-cyan-400 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="workflow-node px-5 py-2 rounded-xl bg-cyan-900/30 border border-cyan-500/30 text-cyan-300 text-sm font-bold">XDR Platform</div>
+      <svg class="w-4 h-4 text-cyan-400 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="workflow-node px-4 py-1.5 rounded bg-green-900/30 border border-green-500/30 text-green-300 font-semibold">Unified Investigation Timeline</div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 5: SOAR -->
+<section class="mb-16 animate-on-scroll" id="phase5">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-green-900/20 border border-green-500/20 text-green-400 text-xs font-semibold mb-3">PHASE 5</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">SOAR Automation</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">5,000 alerts daily. Analysts cannot investigate everything manually. SOAR handles the noise; humans handle the signal.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 mb-8">
+    <div class="grid md:grid-cols-3 gap-4 mb-6">
+      <div class="p-4 rounded-xl bg-purple-900/10 border border-purple-500/20 text-center stat-card">
+        <div class="text-purple-400 font-bold text-lg mb-1">Orchestration</div>
+        <div class="text-gray-400 text-sm">Connecting security tools together into automated workflows</div>
+      </div>
+      <div class="p-4 rounded-xl bg-cyan-900/10 border border-cyan-500/20 text-center stat-card">
+        <div class="text-cyan-400 font-bold text-lg mb-1">Automation</div>
+        <div class="text-gray-400 text-sm">Eliminating repetitive manual tasks</div>
+      </div>
+      <div class="p-4 rounded-xl bg-green-900/10 border border-green-500/20 text-center stat-card">
+        <div class="text-green-400 font-bold text-lg mb-1">Response</div>
+        <div class="text-gray-400 text-sm">Consistent, repeatable actions at machine speed</div>
+      </div>
+    </div>
+
+    <div class="bg-gray-900/50 rounded-xl p-5">
+      <div class="text-sm text-gray-500 mb-4">SOAR Automated Workflow — Brute Force Example</div>
+      <div class="flex flex-col md:flex-row items-center gap-1 md:gap-0 text-xs">
+        <div class="px-3 py-2 rounded-lg bg-yellow-900/30 border border-yellow-500/30 text-yellow-300 font-semibold">Alert</div>
+        <svg class="w-4 h-4 text-gray-600 md:rotate-0 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300">Check Threat Intel</div>
+        <svg class="w-4 h-4 text-gray-600 md:rotate-0 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300">Check Asset Criticality</div>
+        <svg class="w-4 h-4 text-gray-600 md:rotate-0 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300">Disable Account</div>
+        <svg class="w-4 h-4 text-gray-600 md:rotate-0 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="px-3 py-2 rounded-lg bg-green-900/30 border border-green-500/30 text-green-300 font-semibold">Create Ticket</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-xl p-6 gradient-bg border border-green-500/10">
+    <div class="flex items-start gap-4">
+      <div class="w-10 h-10 rounded-lg bg-green-900/30 flex items-center justify-center text-green-400 flex-shrink-0 text-lg">&#9889;</div>
+      <div>
+        <div class="text-green-400 font-semibold mb-1">Key Learning</div>
+        <p class="text-gray-400 text-sm">SOAR reduces repetitive work so analysts focus on complex investigations. Automation handles the noise; humans handle the signal.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 6: ATTACK SIMULATION -->
+<section class="mb-16 animate-on-scroll" id="phase6">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-purple-900/20 border border-purple-500/20 text-purple-400 text-xs font-semibold mb-3">PHASE 6</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Complete Attack Simulation</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">An end-to-end attack from phishing to exfiltration, mapped across the entire SOC ecosystem.</p>
+  </div>
+
+  <div class="glass rounded-xl p-4 md:p-6">
+    <div class="space-y-3">
+      <div class="attack-step p-4 rounded-xl bg-gray-800/30 border border-gray-700" onclick="toggleStep(this)">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-red-900/40 flex items-center justify-center text-red-400 text-sm font-bold">1</span>
+            <div><span class="text-red-400 font-bold text-sm">Phishing Email</span><span class="ml-2 mitre-badge bg-red-900/30 text-red-400 border border-red-500/20">Initial Access</span></div>
+          </div>
+          <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <div class="step-detail hidden mt-4 pt-4 border-t border-gray-700">
+          <div class="grid md:grid-cols-2 gap-3 text-sm">
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Logs:</span> <span class="text-gray-300">Email gateway, proxy logs</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Alerts:</span> <span class="text-yellow-300">Phishing detection</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">MITRE:</span> <span class="text-red-400">T1566 — Phishing</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">SOC:</span> <span class="text-gray-300">L1 triage</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="attack-step p-4 rounded-xl bg-gray-800/30 border border-gray-700" onclick="toggleStep(this)">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-orange-900/40 flex items-center justify-center text-orange-400 text-sm font-bold">2</span>
+            <div><span class="text-orange-400 font-bold text-sm">PowerShell Execution</span><span class="ml-2 mitre-badge bg-orange-900/30 text-orange-400 border border-orange-500/20">Execution</span></div>
+          </div>
+          <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <div class="step-detail hidden mt-4 pt-4 border-t border-gray-700">
+          <div class="grid md:grid-cols-2 gap-3 text-sm">
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Logs:</span> <span class="text-gray-300">Windows Event 4688, 4104</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Alerts:</span> <span class="text-yellow-300">PowerShell EDR alert</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">MITRE:</span> <span class="text-orange-400">T1059 — Command &amp; Scripting</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">SOC:</span> <span class="text-gray-300">L2 investigation</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="attack-step p-4 rounded-xl bg-gray-800/30 border border-gray-700" onclick="toggleStep(this)">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-purple-900/40 flex items-center justify-center text-purple-400 text-sm font-bold">3</span>
+            <div><span class="text-purple-400 font-bold text-sm">Persistence Established</span><span class="ml-2 mitre-badge bg-purple-900/30 text-purple-400 border border-purple-500/20">Persistence</span></div>
+          </div>
+          <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <div class="step-detail hidden mt-4 pt-4 border-t border-gray-700">
+          <div class="grid md:grid-cols-2 gap-3 text-sm">
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Logs:</span> <span class="text-gray-300">Registry changes (Event 4657)</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Alerts:</span> <span class="text-yellow-300">Registry persistence detection</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">MITRE:</span> <span class="text-purple-400">T1547 — Boot/Logon Autostart</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">SOC:</span> <span class="text-gray-300">L2 escalates to L3</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="attack-step p-4 rounded-xl bg-gray-800/30 border border-gray-700" onclick="toggleStep(this)">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-cyan-900/40 flex items-center justify-center text-cyan-400 text-sm font-bold">4</span>
+            <div><span class="text-cyan-400 font-bold text-sm">Credential Dumping</span><span class="ml-2 mitre-badge bg-cyan-900/30 text-cyan-400 border border-cyan-500/20">Credential Access</span></div>
+          </div>
+          <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <div class="step-detail hidden mt-4 pt-4 border-t border-gray-700">
+          <div class="grid md:grid-cols-2 gap-3 text-sm">
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Logs:</span> <span class="text-gray-300">LSASS access (Event 4663)</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Alerts:</span> <span class="text-yellow-300">Credential theft alert</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">MITRE:</span> <span class="text-cyan-400">T1003 — OS Credential Dumping</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">SOC:</span> <span class="text-red-400 font-semibold">Incident Declared</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="attack-step p-4 rounded-xl bg-gray-800/30 border border-gray-700" onclick="toggleStep(this)">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-pink-900/40 flex items-center justify-center text-pink-400 text-sm font-bold">5</span>
+            <div><span class="text-pink-400 font-bold text-sm">Lateral Movement</span><span class="ml-2 mitre-badge bg-pink-900/30 text-pink-400 border border-pink-500/20">Lateral Movement</span></div>
+          </div>
+          <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <div class="step-detail hidden mt-4 pt-4 border-t border-gray-700">
+          <div class="grid md:grid-cols-2 gap-3 text-sm">
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Logs:</span> <span class="text-gray-300">Network connections (Event 5156)</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Alerts:</span> <span class="text-yellow-300">Pass The Hash detected</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">MITRE:</span> <span class="text-pink-400">T1550 — Use Alternate Auth Material</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">SOC:</span> <span class="text-red-400 font-semibold">Containment Initiated</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="attack-step p-4 rounded-xl bg-gray-800/30 border border-gray-700" onclick="toggleStep(this)">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-red-900/40 flex items-center justify-center text-red-400 text-sm font-bold">6</span>
+            <div><span class="text-red-400 font-bold text-sm">Data Exfiltration</span><span class="ml-2 mitre-badge bg-red-900/30 text-red-400 border border-red-500/20">Exfiltration</span></div>
+          </div>
+          <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <div class="step-detail hidden mt-4 pt-4 border-t border-gray-700">
+          <div class="grid md:grid-cols-2 gap-3 text-sm">
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Logs:</span> <span class="text-gray-300">Outbound data transfer logs</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">Alerts:</span> <span class="text-yellow-300">Large outbound transfer</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">MITRE:</span> <span class="text-red-400">T1048 — Exfiltration Over C2</span></div>
+            <div class="p-3 rounded-lg bg-gray-800/50"><span class="text-gray-500">SOC:</span> <span class="text-red-400 font-semibold">Full IR Activation</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 7: ANALYST DAY -->
+<section class="mb-16 animate-on-scroll" id="phase7">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-yellow-900/20 border border-yellow-500/20 text-yellow-400 text-xs font-semibold mb-3">PHASE 7</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">A Day in the Life of a SOC Analyst</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">From morning dashboard review to closing tickets — this is what SOC life really looks like.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 md:p-8">
+    <div class="relative pl-8 space-y-6">
+      <div class="relative">
+        <div class="timeline-dot absolute -left-8"></div>
+        <div class="text-purple-400 text-sm font-semibold">09:00 — Review Dashboard</div>
+        <div class="text-gray-500 text-xs">Check new alerts, open incidents, critical system status</div>
+      </div>
+      <div class="relative">
+        <div class="timeline-dot absolute -left-8"></div>
+        <div class="text-blue-400 text-sm font-semibold">10:00 — Investigate Alert</div>
+        <div class="text-gray-500 text-xs">Review failed login alert, collect evidence, determine if incident</div>
+      </div>
+      <div class="relative">
+        <div class="timeline-dot absolute -left-8"></div>
+        <div class="text-cyan-400 text-sm font-semibold">11:00 — Threat Hunting</div>
+        <div class="text-gray-500 text-xs">Proactive hunt for PowerShell abuse across the environment</div>
+      </div>
+      <div class="relative">
+        <div class="timeline-dot absolute -left-8"></div>
+        <div class="text-yellow-400 text-sm font-semibold">13:00 — Incident Response Meeting</div>
+        <div class="text-gray-500 text-xs">Daily standup with L2/L3 analysts and SOC manager</div>
+      </div>
+      <div class="relative">
+        <div class="timeline-dot absolute -left-8"></div>
+        <div class="text-green-400 text-sm font-semibold">15:00 — Case Documentation</div>
+        <div class="text-gray-500 text-xs">Update tickets, write investigation summaries, close resolved cases</div>
+      </div>
+      <div class="relative">
+        <div class="timeline-dot absolute -left-8"></div>
+        <div class="text-purple-400 text-sm font-semibold">17:00 — Detection Improvement</div>
+        <div class="text-gray-500 text-xs">Suggest rule improvements, update playbooks, share findings</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 8: MATURITY -->
+<section class="mb-16 animate-on-scroll" id="phase8">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-orange-900/20 border border-orange-500/20 text-orange-400 text-xs font-semibold mb-3">PHASE 8</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">SOC Maturity Model</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">Organizations evolve their SOC capabilities over time. Here's the progression from basic logging to XDR-driven operations.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 mb-8">
+    <div class="space-y-2">
+      <div class="maturity-item flex items-center gap-4 p-3 rounded-lg bg-gray-800/30 border border-gray-700"><span class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-gray-400 text-xs font-bold">1</span><div class="flex-1"><div class="text-gray-400 font-semibold text-sm">Basic Logging</div><div class="text-gray-600 text-xs">Logs collected but no centralized analysis</div></div></div>
+      <div class="maturity-item flex items-center gap-4 p-3 rounded-lg bg-gray-800/30 border border-gray-700"><span class="w-8 h-8 rounded-full bg-blue-900/30 flex items-center justify-center text-blue-400 text-xs font-bold">2</span><div class="flex-1"><div class="text-blue-400 font-semibold text-sm">SIEM Implementation</div><div class="text-gray-600 text-xs">Centralized log collection and basic search</div></div></div>
+      <div class="maturity-item flex items-center gap-4 p-3 rounded-lg bg-gray-800/30 border border-gray-700"><span class="w-8 h-8 rounded-full bg-purple-900/30 flex items-center justify-center text-purple-400 text-xs font-bold">3</span><div class="flex-1"><div class="text-purple-400 font-semibold text-sm">Detection Rules</div><div class="text-gray-600 text-xs">Custom correlation rules and alerting</div></div></div>
+      <div class="maturity-item flex items-center gap-4 p-3 rounded-lg bg-gray-800/30 border border-gray-700"><span class="w-8 h-8 rounded-full bg-cyan-900/30 flex items-center justify-center text-cyan-400 text-xs font-bold">4</span><div class="flex-1"><div class="text-cyan-400 font-semibold text-sm">Threat Hunting</div><div class="text-gray-600 text-xs">Proactive hunting and hypothesis-driven investigations</div></div></div>
+      <div class="maturity-item flex items-center gap-4 p-3 rounded-lg bg-gray-800/30 border border-gray-700"><span class="w-8 h-8 rounded-full bg-green-900/30 flex items-center justify-center text-green-400 text-xs font-bold">5</span><div class="flex-1"><div class="text-green-400 font-semibold text-sm">SOAR Automation</div><div class="text-gray-600 text-xs">Automated response for common alerts</div></div></div>
+      <div class="maturity-item flex items-center gap-4 p-3 rounded-lg bg-gray-800/30 border border-gray-700"><span class="w-8 h-8 rounded-full bg-purple-900/30 flex items-center justify-center text-purple-400 text-xs font-bold">6</span><div class="flex-1"><div class="text-purple-400 font-semibold text-sm">XDR-Driven SOC</div><div class="text-gray-600 text-xs">Fully integrated detection, investigation, and response</div></div></div>
+    </div>
+  </div>
+
+  <div class="glass rounded-xl p-6">
+    <div class="flex flex-col md:flex-row items-center gap-0 text-xs">
+      <div class="px-2.5 py-1.5 rounded-l bg-gray-800 border border-gray-700 text-gray-400">Logs</div>
+      <div class="px-2.5 py-1.5 bg-gray-800 border-t border-b border-gray-700 text-gray-500">&#8594;</div>
+      <div class="px-2.5 py-1.5 bg-blue-900/30 border border-blue-500/30 text-blue-300 font-semibold">SIEM</div>
+      <div class="px-2.5 py-1.5 bg-blue-900/20 border-t border-b border-blue-500/20 text-gray-500">&#8594;</div>
+      <div class="px-2.5 py-1.5 bg-purple-900/30 border border-purple-500/30 text-purple-300 font-semibold">Detection</div>
+      <div class="px-2.5 py-1.5 bg-purple-900/20 border-t border-b border-purple-500/20 text-gray-500">&#8594;</div>
+      <div class="px-2.5 py-1.5 bg-cyan-900/30 border border-cyan-500/30 text-cyan-300 font-semibold">Hunting</div>
+      <div class="px-2.5 py-1.5 bg-cyan-900/20 border-t border-b border-cyan-500/20 text-gray-500">&#8594;</div>
+      <div class="px-2.5 py-1.5 bg-green-900/30 border border-green-500/30 text-green-300 font-semibold">SOAR</div>
+      <div class="px-2.5 py-1.5 bg-green-900/20 border-t border-b border-green-500/20 text-gray-500">&#8594;</div>
+      <div class="px-2.5 py-1.5 rounded-r bg-purple-900/30 border border-purple-500/30 text-purple-300 font-semibold">XDR</div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 9: CAPSTONE LAB -->
+<section class="mb-16 animate-on-scroll" id="phase9">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-green-900/20 border border-green-500/20 text-green-400 text-xs font-semibold mb-3">PHASE 9 — CAPSTONE</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Capstone SOC Investigation Lab</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">Your final challenge — investigate a potential account compromise using everything you've learned across 8 days.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 md:p-8 mb-8">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="px-3 py-1 rounded bg-purple-900/20 border border-purple-500/20 text-purple-400 text-xs font-bold">DIFFICULTY: INTERMEDIATE</div>
+      <div class="px-3 py-1 rounded bg-cyan-900/20 border border-cyan-500/20 text-cyan-400 text-xs font-bold">&#9201; 30 MIN</div>
+    </div>
+    <div class="grid grid-cols-6 gap-1 text-center text-xs mb-6">
+      <div class="p-2.5 rounded bg-red-900/30 border border-red-500/20 text-red-400 font-bold">4625</div>
+      <div class="p-2.5 rounded bg-red-900/30 border border-red-500/20 text-red-400 font-bold">4625</div>
+      <div class="p-2.5 rounded bg-red-900/30 border border-red-500/20 text-red-400 font-bold">4625</div>
+      <div class="p-2.5 rounded bg-green-900/30 border border-green-500/20 text-green-400 font-bold">4624</div>
+      <div class="p-2.5 rounded bg-purple-900/30 border border-purple-500/20 text-purple-400 font-bold">4672</div>
+      <div class="p-2.5 rounded bg-orange-900/30 border border-orange-500/20 text-orange-400 font-bold">PS</div>
+    </div>
+
+    <div class="text-sm text-gray-500 mb-4">Investigation Checklist</div>
+    <div class="grid md:grid-cols-3 gap-4 mb-6">
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700 stat-card">
+        <div class="text-cyan-400 font-bold text-sm mb-3">&#128270; Step 1 — Review Logs</div>
+        <p class="text-gray-400 text-xs mb-3">Search: <code class="text-cyan-400 mono">EventCode=4625 OR EventCode=4624</code></p>
+        <div class="flex items-center gap-2"><span class="lab-check" onclick="this.classList.toggle('checked')"></span><span class="text-gray-500 text-xs">Completed</span></div>
+      </div>
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700 stat-card">
+        <div class="text-cyan-400 font-bold text-sm mb-3">&#128200; Step 2 — Map to MITRE</div>
+        <p class="text-gray-400 text-xs mb-3">Map events to Credential Access, Privilege Escalation, Execution</p>
+        <div class="flex items-center gap-2"><span class="lab-check" onclick="this.classList.toggle('checked')"></span><span class="text-gray-500 text-xs">Completed</span></div>
+      </div>
+      <div class="p-4 rounded-xl bg-gray-800/50 border border-gray-700 stat-card">
+        <div class="text-cyan-400 font-bold text-sm mb-3">&#128221; Step 3 — Create Ticket</div>
+        <p class="text-gray-400 text-xs mb-3">Document findings, severity, affected assets, recommendations</p>
+        <div class="flex items-center gap-2"><span class="lab-check" onclick="this.classList.toggle('checked')"></span><span class="text-gray-500 text-xs">Completed</span></div>
+      </div>
+    </div>
+
+    <button onclick="toggleSolution()" class="px-5 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-500 transition-all">Reveal Solution &#8594;</button>
+    <div id="solutionPanel" class="hidden mt-5 pt-5 border-t border-gray-700">
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="p-4 rounded-xl bg-red-900/10 border border-red-500/20">
+          <div class="text-red-400 font-bold text-sm mb-2">Analysis</div>
+          <p class="text-gray-400 text-sm">100 failed logins from same IP in 3 minutes, followed by successful login (4624), privilege escalation (4672), and PowerShell. This is a confirmed brute force attack leading to account compromise.</p>
+        </div>
+        <div class="p-4 rounded-xl bg-green-900/10 border border-green-500/20">
+          <div class="text-green-400 font-bold text-sm mb-2">Recommended Response</div>
+          <ul class="text-gray-400 text-sm space-y-1">
+            <li>&#8226; Disable compromised account immediately</li>
+            <li>&#8226; Block source IP (185.220.101.45)</li>
+            <li>&#8226; Reset Administrator password</li>
+            <li>&#8226; Escalate for full forensic analysis</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-xl p-6 gradient-bg border border-purple-500/10">
+    <div class="text-purple-400 font-bold text-sm mb-3">Lab Deliverables</div>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+      <div class="flex items-center gap-2 text-gray-400"><span class="text-green-400">&#10003;</span> Alert Investigation Notes</div>
+      <div class="flex items-center gap-2 text-gray-400"><span class="text-green-400">&#10003;</span> MITRE Mapping</div>
+      <div class="flex items-center gap-2 text-gray-400"><span class="text-green-400">&#10003;</span> Incident Ticket</div>
+      <div class="flex items-center gap-2 text-gray-400"><span class="text-green-400">&#10003;</span> Response Recommendation</div>
+      <div class="flex items-center gap-2 text-gray-400"><span class="text-green-400">&#10003;</span> Lessons Learned</div>
+      <div class="flex items-center gap-2 text-gray-400"><span class="text-green-400">&#10003;</span> Final SOC Report</div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 10: CAREER -->
+<section class="mb-16 animate-on-scroll" id="phase10">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-blue-900/20 border border-blue-500/20 text-blue-400 text-xs font-semibold mb-3">PHASE 10</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">SOC Career Roadmap</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">Your journey from L1 analyst to SOC Lead — each role builds on the last.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 md:p-8">
+    <div class="flex flex-col items-center gap-0">
+      <div class="career-node p-3.5 rounded-xl bg-green-900/20 border border-green-500/20 w-full max-w-sm text-center" onclick="this.querySelector('.c-detail').classList.toggle('hidden')">
+        <div class="text-green-400 font-bold text-sm">SOC Analyst L1</div>
+        <div class="text-gray-500 text-xs">Alert triage, basic investigations</div>
+        <div class="c-detail hidden mt-2 pt-2 border-t border-green-500/20 text-xs text-gray-400">Skills: SIEM, log analysis, triage | Tools: Splunk, ticketing</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="career-node p-3.5 rounded-xl bg-cyan-900/20 border border-cyan-500/20 w-full max-w-sm text-center" onclick="this.querySelector('.c-detail').classList.toggle('hidden')">
+        <div class="text-cyan-400 font-bold text-sm">SOC Analyst L2</div>
+        <div class="text-gray-500 text-xs">Deep investigation, escalation</div>
+        <div class="c-detail hidden mt-2 pt-2 border-t border-cyan-500/20 text-xs text-gray-400">Skills: Forensics, malware analysis, MITRE | Tools: EDR, SIEM</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="career-node p-3.5 rounded-xl bg-purple-900/20 border border-purple-500/20 w-full max-w-sm text-center" onclick="this.querySelector('.c-detail').classList.toggle('hidden')">
+        <div class="text-purple-400 font-bold text-sm">SOC Analyst L3</div>
+        <div class="text-gray-500 text-xs">Advanced analysis, IR lead</div>
+        <div class="c-detail hidden mt-2 pt-2 border-t border-purple-500/20 text-xs text-gray-400">Skills: Reverse engineering, detection engineering, threat intel</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="career-node p-3.5 rounded-xl bg-yellow-900/20 border border-yellow-500/20 w-full max-w-sm text-center" onclick="this.querySelector('.c-detail').classList.toggle('hidden')">
+        <div class="text-yellow-400 font-bold text-sm">Threat Hunter</div>
+        <div class="text-gray-500 text-xs">Proactive threat detection</div>
+        <div class="c-detail hidden mt-2 pt-2 border-t border-yellow-500/20 text-xs text-gray-400">Skills: Hypothesis-driven hunting, Python, data analysis</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="career-node p-3.5 rounded-xl bg-orange-900/20 border border-orange-500/20 w-full max-w-sm text-center" onclick="this.querySelector('.c-detail').classList.toggle('hidden')">
+        <div class="text-orange-400 font-bold text-sm">Detection Engineer</div>
+        <div class="text-gray-500 text-xs">Rule creation, content development</div>
+        <div class="c-detail hidden mt-2 pt-2 border-t border-orange-500/20 text-xs text-gray-400">Skills: SPL, Sigma, KQL, detection logic, automation</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="career-node p-3.5 rounded-xl bg-red-900/20 border border-red-500/20 w-full max-w-sm text-center" onclick="this.querySelector('.c-detail').classList.toggle('hidden')">
+        <div class="text-red-400 font-bold text-sm">Incident Responder</div>
+        <div class="text-gray-500 text-xs">Full IR lifecycle, forensics</div>
+        <div class="c-detail hidden mt-2 pt-2 border-t border-red-500/20 text-xs text-gray-400">Skills: Digital forensics, containment, recovery, reporting</div>
+      </div>
+      <svg class="w-4 h-4 text-gray-600 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="career-node p-3.5 rounded-xl bg-purple-900/20 border border-purple-500/20 w-full max-w-sm text-center" onclick="this.querySelector('.c-detail').classList.toggle('hidden')">
+        <div class="text-purple-400 font-bold text-sm">SOC Lead / Manager</div>
+        <div class="text-gray-500 text-xs">Team leadership, strategy</div>
+        <div class="c-detail hidden mt-2 pt-2 border-t border-purple-500/20 text-xs text-gray-400">Skills: Management, reporting, strategy, architecture</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 11: FINAL CHALLENGE -->
+<section class="mb-16 animate-on-scroll" id="phase11">
+  <div class="text-center mb-10">
+    <div class="inline-block px-3 py-1 rounded-full bg-purple-900/20 border border-purple-500/20 text-purple-400 text-xs font-semibold mb-3">PHASE 11</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">Final Knowledge Challenge</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">Scenario-based questions to test your end-to-end SOC understanding.</p>
+  </div>
+
+  <div class="mb-6 flex items-center gap-4">
+    <div class="text-4xl md:text-5xl font-black gradient-text" id="scoreDisplay">0</div>
+    <div class="text-gray-500 text-sm">/ 5 Correct</div>
+  </div>
+
+  <div class="space-y-4" id="quizContainer">
+    <div class="glass rounded-xl p-5" data-q="0">
+      <div class="flex items-start gap-3">
+        <span class="text-purple-400 font-bold text-sm mt-0.5">Q1</span>
+        <div class="flex-1">
+          <div class="text-white font-semibold text-sm mb-3">What is the primary difference between SIEM and XDR?</div>
+          <div class="space-y-2">
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,true,0)">SIEM collects and indexes logs; XDR correlates telemetry across multiple security layers for unified investigation</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,0)">They are the same tool with different names</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,0)">XDR replaces firewalls</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="glass rounded-xl p-5" data-q="1">
+      <div class="flex items-start gap-3">
+        <span class="text-purple-400 font-bold text-sm mt-0.5">Q2</span>
+        <div class="flex-1">
+          <div class="text-white font-semibold text-sm mb-3">What does SOAR automate in a SOC?</div>
+          <div class="space-y-2">
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,true,1)">Repetitive investigation tasks like threat intel lookups, IP blocking, and ticket creation</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,1)">All human decision-making</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,1)">Only email notifications</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="glass rounded-xl p-5" data-q="2">
+      <div class="flex items-start gap-3">
+        <span class="text-purple-400 font-bold text-sm mt-0.5">Q3</span>
+        <div class="flex-1">
+          <div class="text-white font-semibold text-sm mb-3">What role does threat intelligence play in a SOC?</div>
+          <div class="space-y-2">
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,true,2)">Provides context about known threats to help analysts validate alerts and prioritize investigations</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,2)">Replaces the need for SIEM</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,2)">Blocks all traffic automatically</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="glass rounded-xl p-5" data-q="3">
+      <div class="flex items-start gap-3">
+        <span class="text-purple-400 font-bold text-sm mt-0.5">Q4</span>
+        <div class="flex-1">
+          <div class="text-white font-semibold text-sm mb-3">A phishing email leads to credential theft and exfiltration. Which MITRE tactics are involved?</div>
+          <div class="space-y-2">
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,true,3)">Initial Access, Execution, Credential Access, Exfiltration</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,3)">Only Execution and Exfiltration</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,3)">Initial Access only</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="glass rounded-xl p-5" data-q="4">
+      <div class="flex items-start gap-3">
+        <span class="text-purple-400 font-bold text-sm mt-0.5">Q5</span>
+        <div class="flex-1">
+          <div class="text-white font-semibold text-sm mb-3">How does a modern SOC handle a phishing attack end-to-end?</div>
+          <div class="space-y-2">
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,true,4)">Email detects &#8594; SIEM alerts &#8594; Analyst investigates &#8594; MITRE mapped &#8594; Incident declared &#8594; Contained &#8594; SOAR automates blocking &#8594; Documented</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,4)">Only the firewall blocks it</div>
+            <div class="quiz-option p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-gray-300 text-sm" onclick="answerQuiz(this,false,4)">The employee is blamed</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PHASE 12: KNOWLEDGE MAP -->
+<section class="mb-16 animate-on-scroll" id="phase12">
+  <div class="text-center mb-10">
+    <h2 class="text-3xl md:text-4xl font-bold mb-3">The Complete SOC Knowledge Map</h2>
+    <p class="text-gray-400 max-w-xl mx-auto">Your 8-day journey from Day 1 to Day 8 — this is the complete picture of how a modern SOC operates.</p>
+  </div>
+
+  <div class="glass rounded-xl p-6 md:p-8">
+    <div class="flex flex-col items-center gap-0 text-sm">
+      <div class="px-5 py-2 rounded-t-lg bg-gray-800 border border-gray-700 text-gray-400">Systems</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-gray-800 border border-gray-700 text-gray-400">Logs</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-gray-800 border border-gray-700 text-gray-400">Collection</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-blue-900/30 border border-blue-500/30 text-blue-300 font-semibold">SIEM</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-purple-900/30 border border-purple-500/30 text-purple-300 font-semibold">Detection Rules</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-yellow-900/30 border border-yellow-500/30 text-yellow-300 font-semibold">Correlation</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-orange-900/30 border border-orange-500/30 text-orange-300 font-semibold">Alert</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-cyan-900/30 border border-cyan-500/30 text-cyan-300 font-semibold">Investigation</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-pink-900/30 border border-pink-500/30 text-pink-300 font-semibold">MITRE Mapping</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-green-900/30 border border-green-500/30 text-green-300 font-semibold">Threat Hunting</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-red-900/30 border border-red-500/30 text-red-300 font-semibold">Incident Response</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-yellow-900/30 border border-yellow-500/30 text-yellow-300 font-semibold">SOAR Automation</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 bg-purple-900/30 border border-purple-500/30 text-purple-300 font-semibold">XDR Platform</div>
+      <svg class="w-4 h-4 text-purple-500 my-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+      <div class="px-5 py-2 rounded-b-lg bg-gray-800 border border-gray-700 text-gray-300 font-bold">Modern SOC</div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- GRADUATION -->
+<section class="mb-16 animate-on-scroll" id="graduation">
+  <div class="glass rounded-2xl p-8 md:p-12 text-center gradient-border">
+    <div class="inline-block px-4 py-1.5 rounded-full bg-purple-900/30 border border-purple-500/20 text-purple-400 text-xs font-semibold mb-6">SOC FUNDAMENTALS COMPLETE</div>
+    <h2 class="text-3xl md:text-4xl font-bold mb-4">Congratulations, Analyst</h2>
+    <p class="text-gray-400 max-w-2xl mx-auto mb-8 text-sm">You have completed the 8-day SOC Fundamentals journey. You now understand how real Security Operations Centers detect, investigate, respond, and recover from cyber attacks — from raw logs all the way to XDR and SOAR automation.</p>
+    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-3 text-left max-w-4xl mx-auto mb-8">
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">Log Collection &amp; SIEM</span></div>
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">Detection &amp; Correlation</span></div>
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">SPL Search &amp; Investigation</span></div>
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">Incident Response Lifecycle</span></div>
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">MITRE ATT&CK Mapping</span></div>
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">Threat Hunting</span></div>
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">XDR &amp; SOAR Architecture</span></div>
+      <div class="flex items-center gap-2 p-2.5 rounded-xl bg-green-900/10 border border-green-500/10"><span class="text-green-400 text-xs">&#10003;</span><span class="text-gray-300 text-xs">End-to-End SOC Mindset</span></div>
+    </div>
+    <div class="text-gray-500 text-sm">You are ready for advanced SOC training. The journey continues.</div>
+  </div>
+</section>
+
+</div><!-- end container -->
+
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.animate-on-scroll').forEach(el => observer.observe(el));
+
+function toggleStep(el) {
+  const detail = el.querySelector('.step-detail');
+  const arrow = el.querySelector('svg');
+  if(detail) detail.classList.toggle('hidden');
+  if(arrow) arrow.style.transform = detail.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+function toggleSolution() {
+  document.getElementById('solutionPanel').classList.toggle('hidden');
+}
+
+let score = 0;
+function answerQuiz(el, correct, qIdx) {
+  const card = el.closest('[data-q]');
+  const options = card.querySelectorAll('.quiz-option');
+  options.forEach(o => o.classList.add('disabled'));
+  if(correct) {
+    el.classList.add('correct');
+    score++;
+  } else {
+    el.classList.add('wrong');
+    options.forEach(o => {
+      if(o.onclick && o.onclick.toString().includes('true,')) o.classList.add('correct');
+    });
+  }
+  document.getElementById('scoreDisplay').textContent = score;
+}
+</script>
+
+</body>
+</html>
